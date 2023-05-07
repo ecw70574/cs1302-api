@@ -49,8 +49,7 @@ import javafx.scene.control.Alert.AlertType;
 import javafx.geometry.Insets;
 import javafx.scene.paint.Color;
 import javafx.scene.text.TextAlignment;
-//import java.util.LinkedList;
-//import esapi.Encoder;
+import javafx.scene.control.ProgressBar;
 
 /**
  * REPLACE WITH NON-SHOUTING DESCRIPTION OF YOUR APP.
@@ -83,6 +82,7 @@ public class ApiApp extends Application {
     Scene scene;
     VBox root;
     HBox topRow;
+    HBox bottomRow;
     Label guessLabel;
     Label searchLabel;
     ComboBox priceOptions;
@@ -90,6 +90,7 @@ public class ApiApp extends Application {
     TextField searchBox;
     Label sourcesLabel;
     Label notice;
+    ProgressBar progressBar;
     RadioButton strongNeg;
     RadioButton negative;
     RadioButton neutral;
@@ -100,15 +101,9 @@ public class ApiApp extends Application {
     HBox guessesHolder;
     Label radiusLabel;
     Label priceLabel;
-//    Label score_tag;
-//    Label agreement;
-//    Label subjectivity;
-//    Label confidence;
-//    Label irony;
     Label instructions;
     TextFlow textFlow;
     ScrollPane textPane;
-//    VBox output;
     int numResults;
     String[] aliases;
     String sentimentFilter;
@@ -135,6 +130,8 @@ public class ApiApp extends Application {
         this.numResults = 0;
         this.numSentimentCalls = 0;
         this.root = new VBox();
+        this.bottomRow = new HBox();
+        this.progressBar = new ProgressBar(0);
         this.moreThanYelp = new Label("A Yelp review is often simplified into "
         + "a rating out of 5 stars. Performing sentiment analysis");
         this.moreThanYelp2 = new Label("on the most recent review "
@@ -144,7 +141,7 @@ public class ApiApp extends Application {
         this.guessLabel = new Label("Guess: ");
         this.go = new Button("Go!");
         this.imgView = new ImageView();
-        this.searchBox = new TextField("City, State or a street address...");
+        this.searchBox = new TextField("City, State...");
         this.priceOptions = new ComboBox();
         this.strongNeg = new RadioButton("Strong Negative");
         this.negative = new RadioButton("Negative");
@@ -160,16 +157,11 @@ public class ApiApp extends Application {
         this.sentimentMatch = new Restaurant[100];
         this.timeline = new Timeline();
         this.imgViewHolder = new HBox();
-//        this.rankedReviews = new <Restaurant> LinkedList();
-        this.instructions = new Label("What do you want the sentiment of the most recent Yelp review to be?");
-//        this.score_tag = new Label("Score Tag: ");
-//        this.agreement = new Label("Agreement: ");
-//        this.subjectivity = new Label("Subjectivity: ");
-//        this.confidence = new Label("Confidence: ");
-//        this.irony = new Label("Irony: ");
-//        this.imgView = new ImageView();
+        this.instructions = new Label("Filter for the sentiment of the restaurant reviews...");
+//        this.instructions = new Label("What do you want the sentiment of the most recent Yelp review to be?");
 
-        this.sourcesLabel = new Label("Results provided by the Yelp Fusion API and MeaningCloud Sentiment Analysis API version 2.1");
+
+        this.sourcesLabel = new Label("Results provided by the Yelp Fusion API and MeaningCloud Sentiment Analysis API");
         this.notice = new Label("Filter for restaurants...");
 
     } // ApiApp
@@ -214,6 +206,8 @@ public class ApiApp extends Application {
         guessesHolder.getChildren().addAll(strongNeg, negative, neutral,positive, strongPos,go);
         guessesHolder.setMargin(go, new Insets(0,10,0,100));
 
+        bottomRow.getChildren().addAll(progressBar, sourcesLabel);
+
         guessesHolder.setHgrow(go, Priority.ALWAYS);
         priceOptions.setValue("$");
         priceOptions.getItems().addAll("$","$$","$$$","$$$$");
@@ -225,7 +219,7 @@ public class ApiApp extends Application {
         imgViewHolder.setAlignment(Pos.CENTER);
         root.getChildren().addAll(moreThanYelp, moreThanYelp2,
         notice,topRow,radiusLabel, radius, instructions,
-        guessesHolder,imgViewHolder,textPane,sourcesLabel);
+        guessesHolder,imgViewHolder,textPane,bottomRow);
 
         topRow.getChildren().addAll(searchLabel,searchBox,priceLabel, priceOptions);
         topRow.setHgrow(searchBox, Priority.ALWAYS);
@@ -432,8 +426,8 @@ public class ApiApp extends Application {
                     System.out.print(sentenceInfo);
                     Text newText = new Text(sentenceInfo);
                     newText.setFill(Color.RED);
-                    String hasDisagreement = " but is inconsistent in sentiment throughout the review.";
-                    String hasAgreement = " and is consistent in sentiment throughout the review.";
+                    String hasDisagreement = " has inconsistent sentiment throughout ";
+                    String hasAgreement = " has consistent sentiment throughout ";
                     if (this.sentimentFilter.equals(restaurants[numSentimentCalls].getScoreTag())) {
                         System.out.println("Met condition to be printed at index "
                         + numSentimentCalls);
@@ -442,24 +436,29 @@ public class ApiApp extends Application {
                         if (restaurants[numSentimentCalls].getAgreement().equals("DISAGREEMENT")) {
                             agreementMessage = hasDisagreement;
                         }
-                        Text outputLine;
-                        outputLine = new Text("\n" + restaurants[numSentimentCalls].getName()+" has a confidence of "
-                        + restaurants[numSentimentCalls].getConfidence()+ agreementMessage);
+                        String outputString = "\n" + "The review for " + restaurants[numSentimentCalls].getName() + agreementMessage + "and a confidence level of " + restaurants[numSentimentCalls].getConfidence();
+                        Text outputLine = new Text(outputString);
 
                         Platform.runLater(() -> this.textFlow.getChildren().add(outputLine));
                         Platform.runLater(() -> this.textFlow.getChildren().add(newText));
+
+                        System.out.println("num sentiment calls: " + numSentimentCalls + "& numResults: " + numResults);
                          if (this.numSentimentCalls == this.numResults) {
                              String successMessage = "Done! Try a new location in your next search!";
                              Platform.runLater(() -> this.notice.setText(successMessage));
                          }
                     }
                     this.numSentimentCalls++;
+                    setProgress(1.0 * (numSentimentCalls) / this.numResults);
                 } catch (IOException ioe) {
                     System.out.println("Unable to send message to server.");
                 } catch (InterruptedException ie) {
                     System.out.println("Unable to send message to server.");
                 } catch (NumberFormatException nfe) {
                     System.out.println("Exceeded rate limit. Unsuccessful request made.");
+                    timeline.pause();
+                    timeline.setCycleCount(timeline.getCycleCount() + 1);
+                    timeline.play();
                     numInvalidRequests++;
                 }
             };
@@ -467,6 +466,7 @@ public class ApiApp extends Application {
             timeline.setCycleCount(numResults);
             timeline.getKeyFrames().add(keyFrame);
             timeline.play();
+
 
             if (this.numSentimentCalls == this.numResults) {
                 String successMessage = "Done! Try a new location in your next search!";
@@ -490,17 +490,18 @@ public class ApiApp extends Application {
 /*
     public void printToScene() {
         for (int i = 0; i < this.numResults; i++) {
-            System.out.println("iteration");
-            if (this.sentimentFilter.equals(restaurants[i].getScoreTag())) {
-                System.out.println("Met condition to be printed at index " + i);
-                Text outputLine;
-                outputLine = new Text("\n" + restaurants[i].getName()
-                +restaurants[i].getConfidence());
-                Platform.runLater(() -> this.textFlow.getChildren().add(outputLine));
-            }
+
         }
     }
 */
+    /**
+     * Creates a function for setting progressBar and puts method calls on JavaFX thread.
+     * @param progress double progress
+     */
+    private void setProgress(final double progress) {
+        Platform.runLater(() -> progressBar.setProgress(progress));
+    }
+
     /**
      * Creates a new thread by taking Runnable parameter.
      * @param task Runnable task
