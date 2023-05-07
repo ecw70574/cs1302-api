@@ -6,11 +6,18 @@ public class Restaurant {
     private String review;
     private String score_tag;
     private int confidence;
-/*
+    private String agreement;
+    public Sentence[] sentence_list;
+    private int numSentences;
+
     public Restaurant() {
-        this.confidence = 0;
+        this.sentence_list = new Sentence[numSentences];
     }
-*/
+
+    public void setNumSentences(int newNum) {
+        this.numSentences = newNum;
+    }
+
     public void setAlias(String newAlias) {
         this.alias = newAlias;
     }
@@ -27,8 +34,12 @@ public class Restaurant {
         this.score_tag = newScoreTag;
     }
 
-    public void setConfidence(int  newConfidence) {
+    public void setConfidence(int newConfidence) {
         this.confidence = newConfidence;
+    }
+
+    public void setAgreement(String newAgreement) {
+        this.agreement = newAgreement;
     }
 
     public String getAlias() {
@@ -49,5 +60,9 @@ public class Restaurant {
 
     public int getConfidence() {
         return this.confidence;
+    }
+
+    public String getAgreement() {
+        return this.agreement;
     }
 }
