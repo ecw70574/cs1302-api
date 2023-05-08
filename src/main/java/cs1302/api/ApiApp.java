@@ -434,12 +434,9 @@ public class ApiApp extends Application {
                         String success = "Done! Try a new location in your next search!";
                         Platform.runLater(() -> this.notice.setText(success));
                     }
-                    if (!validOutput) {
-                        throw new IllegalArgumentException("There are valid restauarant "
-                          +  "reviews in this location and price range, but they do not match "
-                          +  "the sentiment in filter.");
-                    }
+
                 }
+
                 this.numSentimentCalls ++ ;
                 setProgress(1.0 * (numSentimentCalls) / this.numResults);
             } catch (IOException ioe) {
@@ -461,9 +458,15 @@ public class ApiApp extends Application {
         timeline.setCycleCount(numResults);
         timeline.getKeyFrames().add(keyFrame);
         timeline.play();
+
         if (this.numSentimentCalls == this.numResults) {
             String successMessage = "Done! Try a new location in your next search!";
             Platform.runLater(() -> this.notice.setText(successMessage));
+            if (validOutput == false) {
+                Platform.runLater(() -> this.textFlow.getChildren().add(new Text(
+                    "There are valid restaurant reviews in this location and price "
+                    + "range, but they do not match the sentiment in filter")));
+            }
         }
     }
 /*
