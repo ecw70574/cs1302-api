@@ -108,8 +108,6 @@ public class ApiApp extends Application {
     String[] aliases;
     String sentimentFilter;
     Restaurant[] restaurants;
-//    int numToPrint;
-//    Restaurant[] sentimentMatch;
     Timeline timeline;
     boolean validOutput;
     int numSentimentCalls;
@@ -142,7 +140,7 @@ public class ApiApp extends Application {
         this.guessLabel = new Label("Guess: ");
         this.go = new Button("Go!");
         this.imgView = new ImageView();
-        this.searchBox = new TextField("City, State...");
+        this.searchBox = new TextField("Ex: Athens, GA or 30602...");
         this.priceOptions = new ComboBox();
         this.strongNeg = new RadioButton("Strong Negative");
         this.negative = new RadioButton("Negative");
@@ -152,31 +150,24 @@ public class ApiApp extends Application {
         this.radioGroup = new ToggleGroup();
         this.radiusLabel = new Label("Enter a preferred radius, in meters:");
         this.priceLabel = new Label("Price level: ");
-        this.radius = new Slider(0, 40000,0);
+        this.radius = new Slider(0, 40000,20000);
         this.guessesHolder = new HBox();
         this.restaurants = new Restaurant[100];
-//        this.sentimentMatch = new Restaurant[100];
         this.timeline = new Timeline();
         this.imgViewHolder = new HBox();
         this.instructions = new Label("Filter for the sentiment of the restaurant reviews...");
 //        this.instructions = new Label("What do you want the sentiment of the most recent Yelp review to be?");
-
-
         this.sourcesLabel = new Label("Results provided by the Yelp Fusion API and MeaningCloud Sentiment Analysis API");
         this.notice = new Label("Filter for restaurants...");
-
     } // ApiApp
 
     /** {@inheritDoc} */
     @Override
     public void start(Stage stage) {
-
         this.stage = stage;
         // demonstrate how to load local asset using "file:resources/"
 //        Image yelpImage = new Image("file:resources/readme-banner.png");
         Image yelpImage = new Image("file:resources/YelpImage.png");
-//        ImageView banner = new ImageView(bannerImage);
-//        ImageView imgView = new ImageView(yelpImage);
         this.imgView.setImage(yelpImage);
 
         imgView.setImage(yelpImage);
@@ -232,12 +223,14 @@ public class ApiApp extends Application {
         stage.setOnCloseRequest(event -> Platform.exit());
         stage.sizeToScene();
         stage.show();
+        /*
         Runnable task = () -> {
             this.buttonPress();
         };
+        */
 
-//        this.go.setOnAction(event -> buttonPress());
-        this.go.setOnAction(event -> runInNewThread(task));
+        this.go.setOnAction(event -> buttonPress());
+//        this.go.setOnAction(event -> runInNewThread(task));
     } // start
 
     public void buttonPress() {
@@ -252,44 +245,53 @@ public class ApiApp extends Application {
             yelpKey = config.getProperty("yelpfusionapi.apikey");
             sentimentKey = config.getProperty("meaningcloudapi.apikey");
             System.out.println(yelpKey);
+
+            RadioButton selectedRadioButton = (RadioButton) radioGroup.getSelectedToggle();
+            if (selectedRadioButton == null) {
+                throw new NullPointerException("No button has been selected for sentiment");
+            }
+            String toggleGroupValue = selectedRadioButton.getText();
+            if (toggleGroupValue.equals("Strong Positive")) {
+                this.sentimentFilter = "P+";
+            } else if (toggleGroupValue.equals("Positive")) {
+                this.sentimentFilter = "P";
+            } else if (toggleGroupValue.equals("Neutral")) {
+                this.sentimentFilter = "NEU";
+            } else if (toggleGroupValue.equals("Negative")) {
+                this.sentimentFilter = "N";
+            } else if (toggleGroupValue.equals("Strong Negative")) {
+                this.sentimentFilter = "N+";
+            }
+            System.out.println(this.sentimentFilter);
+            this.textFlow.getChildren().add(new Text("where"
+            + " the OVERALL sentiment of the most recent review is considered "
+            + toggleGroupValue));
+
+            Text newText = new Text("\n" + "This output"
+            + " includes specific excerpts from the review that were tagged for " + toggleGroupValue
+            + " sentiment"+ ": " + "\n");
+            newText.setFill(Color.RED);
+            this.textFlow.getChildren().add(newText);
+            getYelpAliases();
+            Runnable task = () -> {
+                this.getYelpReviews();
+                this.getSentiment();
+            };
+            runInNewThread(task);
+        } catch (NullPointerException npe) {
+            alertError(npe);
         } catch (IOException ioe) {
             System.err.println(ioe);
             ioe.printStackTrace();
         }
-        RadioButton selectedRadioButton = (RadioButton) radioGroup.getSelectedToggle();
-        String toggleGroupValue = selectedRadioButton.getText();
-        System.out.println(toggleGroupValue);
-        if (toggleGroupValue.equals("Strong Positive")) {
-            this.sentimentFilter = "P+";
-        } else if (toggleGroupValue.equals("Positive")) {
-            this.sentimentFilter = "P";
-        } else if (toggleGroupValue.equals("Neutral")) {
-            this.sentimentFilter = "NEU";
-        } else if (toggleGroupValue.equals("Negative")) {
-            this.sentimentFilter = "N";
-        } else if (toggleGroupValue.equals("Strong Negative")) {
-            this.sentimentFilter = "N+";
-        }
-        System.out.println(this.sentimentFilter);
-        Platform.runLater(() -> this.textFlow.getChildren().add(new Text("where"
-        + " the OVERALL sentiment of the most recent review is considered "
-        + toggleGroupValue)));
 
-        Text newText = new Text("\n" + "This output"
-        + " includes specific excerpts from the review that were tagged for " + toggleGroupValue
-        + " sentiment"+ ": " + "\n");
-        newText.setFill(Color.RED);
+//        Platform.runLater(() -> this.textFlow.getChildren().add(newText));
 
-        Platform.runLater(() -> this.textFlow.getChildren().add(newText));
-
-        getYelpAliases();
-        getYelpReviews();
-        getSentiment();
+//        Platform.runLater(() -> getYelpAliases());
         System.out.println("done!!!");
     }
 
     public void getYelpAliases() {
-        System.out.println("alias has been stored.");
         double doubleRadius = this.radius.getValue();
         int intRadius = (int) Math.round(doubleRadius);
         String location = this.searchBox.getText();
@@ -324,20 +326,24 @@ public class ApiApp extends Application {
             System.out.println(responseBody);
             Gson gson = new GsonBuilder().create();
             YelpAliases response1 = gson.<YelpAliases>fromJson(responseBody,YelpAliases.class);
-            System.out.println(response1.businesses.length);
-            this.numResults = response1.businesses.length;
-            if (response1.businesses.length != 0) {
-                for (int i = 0; i< response1.businesses.length; i++) {
-                    YelpBusinesses business = response1.businesses[i];
-                    System.out.println(business.alias);
-                    aliases[i] = business.alias;
-                    Restaurant newRestaurant = new Restaurant();
-                    newRestaurant.setAlias(business.alias);
-                    newRestaurant.setName(business.name);
-                    restaurants[i] = newRestaurant;
+//            System.out.println(response1.businesses.length);
+            if (response1.businesses != null) {
+                this.numResults = response1.businesses.length;
+                if (response1.businesses.length != 0) {
+                    for (int i = 0; i< response1.businesses.length; i++) {
+                        YelpBusinesses business = response1.businesses[i];
+                        System.out.println(business.alias);
+                        aliases[i] = business.alias;
+                        Restaurant newRestaurant = new Restaurant();
+                        newRestaurant.setAlias(business.alias);
+                        newRestaurant.setName(business.name);
+                        restaurants[i] = newRestaurant;
+                    }
+                } else {
+                    throw new IllegalArgumentException(this.numResults + ALERT_IAE);
                 }
             } else {
-                throw new IllegalArgumentException(this.numResults + ALERT_IAE);
+                throw new NullPointerException("Invalid location input. Response could not be stored.");
             }
         } catch (IOException ioe) {
             System.out.println("Unable to send message to server.");
@@ -345,10 +351,13 @@ public class ApiApp extends Application {
             System.out.println("Unable to send message to server.");
         } catch (IllegalArgumentException iae) {
             alertError(iae);
+            System.exit(0);
+        } catch (NullPointerException npe) {
+            alertError(npe);
+            System.exit(0);
         }
 
     }
-//    HttpRequest request = HttpRequest.newBuilder();
 
     public void getYelpReviews() {
         System.out.println("Button has been pressed. Yelp reviews on the way...");
@@ -424,7 +433,6 @@ public class ApiApp extends Application {
                     newText.setFill(Color.RED);
                     String hasDisagreement = " has inconsistent sentiment throughout ";
                     String hasAgreement = " has consistent sentiment throughout ";
-
                     if (this.sentimentFilter.equals(restaurants[numSentimentCalls].getScoreTag())) {
                         System.out.println("Met condition to be printed at index "
                         + numSentimentCalls);
@@ -445,7 +453,7 @@ public class ApiApp extends Application {
                          if (!validOutput) {
                              throw new IllegalArgumentException("There are valid restauarant "
                              + "reviews in this location and price range, but they do not match "
-                             + "the sentiment in filter.")
+                             + "the sentiment in filter.");
                          }
                     }
                     this.numSentimentCalls++;
@@ -461,6 +469,8 @@ public class ApiApp extends Application {
                     timeline.play();
                 } catch (IllegalArgumentException iae) {
                     alertError(iae);
+                } catch(NullPointerException npe) {
+                    alertError(npe);
                 }
             };
             KeyFrame keyFrame = new KeyFrame(Duration.seconds(2), handler);
@@ -481,8 +491,8 @@ public class ApiApp extends Application {
     }
 */
     public void clearForNextRequest() {
-        Platform.runLater(() -> this.textFlow.getChildren().clear());
-        Platform.runLater(() -> this.textFlow.getChildren().add(new Text("Results ")));
+        this.textFlow.getChildren().clear();
+        this.textFlow.getChildren().add(new Text("Results "));
         for (int i = 0; i < this.restaurants.length; i++) {
             this.restaurants[i] = null;
         }
@@ -508,7 +518,9 @@ public class ApiApp extends Application {
      */
     public static void runInNewThread(Runnable task) {
         Thread t = new Thread(task);
+        t.setDaemon(true);
         t.start();
+
     }
 
     /**
