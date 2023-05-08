@@ -108,9 +108,10 @@ public class ApiApp extends Application {
     String[] aliases;
     String sentimentFilter;
     Restaurant[] restaurants;
-    int numToPrint;
-    Restaurant[] sentimentMatch;
+//    int numToPrint;
+//    Restaurant[] sentimentMatch;
     Timeline timeline;
+    boolean validOutput;
     int numSentimentCalls;
     int numInvalidRequests;
     ImageView imgView;
@@ -124,10 +125,10 @@ public class ApiApp extends Application {
      */
     public ApiApp() {
         this.aliases = new String[100];
-//        this.output = new VBox();
         this.textFlow = new TextFlow(new Text("Results "));
         this.textPane = new ScrollPane();
         this.numResults = 0;
+        this.validOutput = false;
         this.numSentimentCalls = 0;
         this.root = new VBox();
         this.bottomRow = new HBox();
@@ -154,7 +155,7 @@ public class ApiApp extends Application {
         this.radius = new Slider(0, 40000,0);
         this.guessesHolder = new HBox();
         this.restaurants = new Restaurant[100];
-        this.sentimentMatch = new Restaurant[100];
+//        this.sentimentMatch = new Restaurant[100];
         this.timeline = new Timeline();
         this.imgViewHolder = new HBox();
         this.instructions = new Label("Filter for the sentiment of the restaurant reviews...");
@@ -174,7 +175,6 @@ public class ApiApp extends Application {
         // demonstrate how to load local asset using "file:resources/"
 //        Image yelpImage = new Image("file:resources/readme-banner.png");
         Image yelpImage = new Image("file:resources/YelpImage.png");
-//        Image yelpImage = new Image("https://business.yelp.com/wp-content/uploads/2020/10/ILL_Visitors_768x512_2x-768x512.png");
 //        ImageView banner = new ImageView(bannerImage);
 //        ImageView imgView = new ImageView(yelpImage);
         this.imgView.setImage(yelpImage);
@@ -195,7 +195,6 @@ public class ApiApp extends Application {
         this.moreThanYelp.setTextAlignment(TextAlignment.JUSTIFY);
         this.moreThanYelp.setPrefWidth(630);
         this.moreThanYelp.setPrefHeight(50);
-
 
         // some labels to display information
         strongNeg.setToggleGroup(radioGroup);
@@ -242,6 +241,7 @@ public class ApiApp extends Application {
     } // start
 
     public void buttonPress() {
+        clearForNextRequest();
         Platform.runLater(() -> this.notice.setText("Loading..."));
 //        this.imgView.setVisible(false);
 
@@ -276,7 +276,7 @@ public class ApiApp extends Application {
         + toggleGroupValue)));
 
         Text newText = new Text("\n" + "This output"
-        + " includes excerpts from the review that were tagged for " + toggleGroupValue
+        + " includes specific excerpts from the review that were tagged for " + toggleGroupValue
         + " sentiment"+ ": " + "\n");
         newText.setFill(Color.RED);
 
@@ -285,7 +285,6 @@ public class ApiApp extends Application {
         getYelpAliases();
         getYelpReviews();
         getSentiment();
-//        printToScene();
         System.out.println("done!!!");
     }
 
@@ -315,7 +314,7 @@ public class ApiApp extends Application {
             .uri(URI.create(targetURL))
             .header("accept", "application/json")
 //            .header("Authorization", "Bearer "+YELP_API_KEY)
-            .header("Authorization", "Bearer "+yelpKey)
+            .header("Authorization", "Bearer " + yelpKey)
             .method("GET", HttpRequest.BodyPublishers.noBody())
             .build();
         try {
@@ -374,7 +373,6 @@ public class ApiApp extends Application {
                 response2 = gson.<Request2Response>fromJson(responseBody,Request2Response.class);
                 Reviews review = response2.reviews[0];
                 restaurants[i].setReview(review.text);
-
                 System.out.println(review.text);
             }
         } catch (IOException ioe) {
@@ -411,13 +409,11 @@ public class ApiApp extends Application {
                     restaurants[numSentimentCalls].setAgreement(response3.agreement);
                     System.out.println(numSentimentCalls);
                     System.out.println(restaurants[numSentimentCalls].getScoreTag());
-
                     restaurants[numSentimentCalls].setNumSentences(response3.sentence_list.length);
                     String sentenceInfo = "";
                     Sentence[] sentences = response3.sentence_list;
                     for (int i = 0; i < sentences.length; i++) {
                         Sentence sentence = sentences[i];
-
                         if (sentence.score_tag.equals(this.sentimentFilter)) {
                             System.out.println("sentence at index " + i +"matches target sentiment");
                             sentenceInfo = sentenceInfo + "\n" + "\t" + sentence.text + "\n";
@@ -428,24 +424,28 @@ public class ApiApp extends Application {
                     newText.setFill(Color.RED);
                     String hasDisagreement = " has inconsistent sentiment throughout ";
                     String hasAgreement = " has consistent sentiment throughout ";
+
                     if (this.sentimentFilter.equals(restaurants[numSentimentCalls].getScoreTag())) {
                         System.out.println("Met condition to be printed at index "
                         + numSentimentCalls);
-
+                        validOutput = true;
                         String agreementMessage = hasAgreement;
                         if (restaurants[numSentimentCalls].getAgreement().equals("DISAGREEMENT")) {
                             agreementMessage = hasDisagreement;
                         }
                         String outputString = "\n" + "The review for " + restaurants[numSentimentCalls].getName() + agreementMessage + "and a confidence level of " + restaurants[numSentimentCalls].getConfidence();
                         Text outputLine = new Text(outputString);
-
                         Platform.runLater(() -> this.textFlow.getChildren().add(outputLine));
                         Platform.runLater(() -> this.textFlow.getChildren().add(newText));
-
                         System.out.println("num sentiment calls: " + numSentimentCalls + "& numResults: " + numResults);
-                         if (this.numSentimentCalls == this.numResults) {
+                         if (this.numSentimentCalls + 1 == this.numResults) {
                              String successMessage = "Done! Try a new location in your next search!";
                              Platform.runLater(() -> this.notice.setText(successMessage));
+                         }
+                         if (!validOutput) {
+                             throw new IllegalArgumentException("There are valid restauarant "
+                             + "reviews in this location and price range, but they do not match "
+                             + "the sentiment in filter.")
                          }
                     }
                     this.numSentimentCalls++;
@@ -459,7 +459,8 @@ public class ApiApp extends Application {
                     timeline.pause();
                     timeline.setCycleCount(timeline.getCycleCount() + 1);
                     timeline.play();
-                    numInvalidRequests++;
+                } catch (IllegalArgumentException iae) {
+                    alertError(iae);
                 }
             };
             KeyFrame keyFrame = new KeyFrame(Duration.seconds(2), handler);
@@ -467,25 +468,10 @@ public class ApiApp extends Application {
             timeline.getKeyFrames().add(keyFrame);
             timeline.play();
 
-
             if (this.numSentimentCalls == this.numResults) {
                 String successMessage = "Done! Try a new location in your next search!";
                 Platform.runLater(() -> this.notice.setText(successMessage));
             }
-
-            /*
-            System.out.println("Starting next timeline...");
-            timeline.setCycleCount(numResults - numSentimentCalls - 1);
-            timeline.getKeyFrames().add(keyFrame);
-            timeline.play();
-            */
-//            printToScene();
-            /*
-            if (timeline.getCycleCount() == numResults) {
-                timeline.stop();
-            }
-            */
-//            timeline.pause();
     }
 /*
     public void printToScene() {
@@ -494,6 +480,20 @@ public class ApiApp extends Application {
         }
     }
 */
+    public void clearForNextRequest() {
+        Platform.runLater(() -> this.textFlow.getChildren().clear());
+        Platform.runLater(() -> this.textFlow.getChildren().add(new Text("Results ")));
+        for (int i = 0; i < this.restaurants.length; i++) {
+            this.restaurants[i] = null;
+        }
+        this.numResults = 0;
+        this.numSentimentCalls = 0;
+        setProgress(0.0);
+        Timeline newTimeline = new Timeline();
+        this.timeline = newTimeline;
+    }
+
+
     /**
      * Creates a function for setting progressBar and puts method calls on JavaFX thread.
      * @param progress double progress
